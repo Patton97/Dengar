@@ -1,3 +1,11 @@
+//TODO LIST
+// Make floor & sky inherit from "scrollable"
+// Spawn cacti
+// Figure out collisions
+// Animate dengar movement (pulse)
+// Fix star twinkle, maybe rng spawn on black sky?
+
+
 var context = document.querySelector("canvas").getContext("2d");
 context.canvas.height = 480;
 context.canvas.width = 640;
@@ -32,44 +40,59 @@ class bgTile
 var sky = {
   height: 11, //Number of tiles in each strip
   yPos: 0,
-  strips: []
+  strips: [],
+  speed: 0.25,
+  offset: 0
 };
 
-generateSkyStrip = function () {
+//Bool flag indicates whether new strip will append or replace
+generateSkyStrip = function (replace = false) {
     let newStrip = [];
     for(let i =0; i < sky.height; i++)
     {
-      let newTile = new bgTile(Math.floor(Math.random() * 32),96);
+      let sx = 97 + Math.floor(Math.random() * 32);
+      let sy = 0;
+      let newTile = new bgTile(sx,sy);
       newStrip.push(newTile);
     }
-    sky.strips.unshift(newStrip);
+    if(replace) { sky.strips.shift();}
+    sky.strips.push(newStrip);
 };
 
 var floor = {
   height: 4, //Number of tiles in each strip
   yPos: context.canvas.height - 4*TILESIZE,
-  strips: []
+  strips: [],
+  speed: 4,
+  offset: 0
 };
 
+//Bool flag indicates whether new strip will just append or replace
 generateFloorStrip = function () {
     let newStrip = [];
-    for(let i =0; i < floor.height; i++)
+    for(let i = 0; i < floor.height; i++)
     {
-      let newTile = new bgTile(Math.floor(Math.random() * 32),128);
+      let sx = 97 + Math.floor(Math.random() * 32);
+      let sy = 32;
+      let newTile = new bgTile(sx,sy);
       newStrip.push(newTile);
     }
-    floor.strips.unshift(newStrip);
+
+    floor.strips.push(newStrip);
+    //Remove head if screen is full (inc. +1 overflow)
+    if(floor.strips.length-1 > context.canvas.width / TILESIZE)
+    {
+      floor.strips.shift();
+    }
 };
 
 //TEMP solution
-//Generate first <x> strips
-for(let i = 0; i < context.canvas.width / TILESIZE; i++)
+//Generate initial strips (fill screen, plus 1 overflow for motion)
+for(let i = 0; i <= context.canvas.width / TILESIZE; i++)
 {
   generateSkyStrip();
   generateFloorStrip();
 }
-
-
 
 var controller = {
   left:false, right:false, up:false,
@@ -98,10 +121,12 @@ var controller = {
 /*End of var declaration*/
 
 //Temp solution, static world
-var drawSky = function()
+var drawSky = function(iFrame)
 {
-  //Foreach strip (along x-axis) NOTE: Need to flip direction
-  for(let i = 0; i < sky.strips.length; i++)
+  //Tiles move 32px per 60 frames
+  sky.offset += sky.speed * (32/60);
+  //Foreach strip (along x-axis, in reverse)
+  for(let i = sky.strips.length-1; i >= 0 ; i--)
   {
     //foreach tile in strip *i* (down y-axis)
     for(let j = 0; j < sky.strips[i].length; j++)
@@ -109,19 +134,27 @@ var drawSky = function()
       //Expanded for readability
       let sx = sky.strips[i][j].sx;
       let sy = sky.strips[i][j].sy;
-      let dx = context.canvas.width - (i+1)*TILESIZE;
+      let dx = (context.canvas.width - (i+1)*TILESIZE) + sky.offset;
       let dy = j*TILESIZE + sky.yPos;
       context.drawImage(spritesheet.img,
                         sx, sy, TILESIZE, TILESIZE,  //source image data
                         dx, dy, TILESIZE, TILESIZE); //dest.  image data
     }
   }
+
+  if(sky.offset >= 32)
+  {
+    generateSkyStrip(true);
+    sky.offset = 0;
+  }
 }
 
-var drawFloor = function()
+var drawFloor = function(iFrame)
 {
-  //Foreach strip (along x-axis) NOTE: Need to flip direction
-  for(let i = 0; i < floor.strips.length; i++)
+  //Tiles move 32px per 60 frames
+  floor.offset += floor.speed * (32/60);
+  //Foreach strip (along x-axis, in reverse)
+  for(let i = floor.strips.length-1; i >= 0; i--)
   {
     //foreach tile in strip *i* (down y-axis)
     for(let j = 0; j < floor.strips[i].length; j++)
@@ -129,12 +162,18 @@ var drawFloor = function()
       //Expanded for readability
       let sx = floor.strips[i][j].sx;
       let sy = floor.strips[i][j].sy;
-      let dx = context.canvas.width - (i+1)*TILESIZE;
+      let dx = (context.canvas.width - (i+1)*TILESIZE) + floor.offset;
       let dy = j*TILESIZE + floor.yPos;
       context.drawImage(spritesheet.img,
                         sx, sy, TILESIZE, TILESIZE,  //source image data
                         dx, dy, TILESIZE, TILESIZE); //dest.  image data
     }
+  }
+
+  if(floor.offset >= 32)
+  {
+    generateFloorStrip(true);
+    floor.offset = 0;
   }
 }
 
@@ -184,7 +223,8 @@ var gameLoop = function()
     character.yVel = 0;
     character.sy = 0;
   }
-  else {
+  else
+  {
     character.sy = 64;
   }
 
@@ -199,8 +239,8 @@ var gameLoop = function()
 
   //Construct next frame
   drawLine(); //Debug only
-  drawFloor();
-  drawSky();
+  drawFloor(iFrame);
+  drawSky(iFrame);
   drawCharacter();
 
   //Update iframe (yes ugly ew)
