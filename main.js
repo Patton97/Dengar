@@ -1,10 +1,28 @@
 //TODO LIST
-// Make floor & sky inherit from "scrollable"
 // Spawn cacti
 // Figure out collisions
 // Animate dengar movement (pulse)
 // Fix star twinkle, maybe rng spawn on black sky?
 
+//Autozoom test
+/************************/
+//https://benjymous.gitlab.io/post/2019-08-25-js13k-tips/
+//zoom the page to fit the window
+onresize=e=>{
+  // zoom the page to maximise your content within the window.
+  // This assumes a 640x480 canvas - change the numbers to match your canvas size
+  document.body.style.zoom=Math.min(window.innerWidth/640, window.innerHeight/480);
+  // Add padding at the top of the page, to centre the content vertically
+  document.body.style.paddingTop=((window.innerHeight/document.body.style.zoom)-480)/2;
+};
+
+onresize(); // manually call the onresize handler, to make sure it's the right
+//size from the start
+
+// Set the left and right margins, to centre the content horizontally
+document.body.style.maxWidth=640;
+document.body.style.margin="auto";
+/************************/
 
 var context = document.querySelector("canvas").getContext("2d");
 context.canvas.height = 480;
@@ -37,62 +55,72 @@ class bgTile
   }
 }
 
-var sky = {
-  height: 11, //Number of tiles in each strip
-  yPos: 0,
-  strips: [],
-  speed: 0.25,
-  offset: 0
-};
-
-//Bool flag indicates whether new strip will append or replace
-generateSkyStrip = function (replace = false) {
-    let newStrip = [];
-    for(let i =0; i < sky.height; i++)
-    {
-      let sx = 97 + Math.floor(Math.random() * 32);
-      let sy = 0;
-      let newTile = new bgTile(sx,sy);
-      newStrip.push(newTile);
-    }
-    if(replace) { sky.strips.shift();}
-    sky.strips.push(newStrip);
-};
-
-var floor = {
-  height: 4, //Number of tiles in each strip
-  yPos: context.canvas.height - 4*TILESIZE,
-  strips: [],
-  speed: 4,
-  offset: 0
-};
-
-//Bool flag indicates whether new strip will just append or replace
-generateFloorStrip = function () {
-    let newStrip = [];
-    for(let i = 0; i < floor.height; i++)
-    {
-      let sx = 97 + Math.floor(Math.random() * 32);
-      let sy = 32;
-      let newTile = new bgTile(sx,sy);
-      newStrip.push(newTile);
-    }
-
-    floor.strips.push(newStrip);
-    //Remove head if screen is full (inc. +1 overflow)
-    if(floor.strips.length-1 > context.canvas.width / TILESIZE)
-    {
-      floor.strips.shift();
-    }
-};
-
-//TEMP solution
-//Generate initial strips (fill screen, plus 1 overflow for motion)
-for(let i = 0; i <= context.canvas.width / TILESIZE; i++)
+class Scrollable
 {
-  generateSkyStrip();
-  generateFloorStrip();
+  constructor(height = 1, yPos = 0, speed = 1, sy = 0)
+  {
+    this.height = height;
+    this.yPos = yPos;
+    this.speed = speed;
+    this.sy = sy;
+    this.strips = [];
+    this.offset = 0;
+
+    //Generate initial strips (fill screen, plus 1 overflow for motion)
+    for(let i = 0; i <= context.canvas.width / TILESIZE; i++)
+    {
+      this.makeNewStrip();
+    }
+  }
+  makeNewStrip()
+  {
+    let newStrip = [];
+    for(let i =0; i < this.height; i++)
+    {
+      let sx = 97 + Math.floor(Math.random() * 32);
+      let sy = this.sy;
+      let newTile = new bgTile(sx,sy);
+      newStrip.push(newTile);
+    }
+    //Push new strip to 'strips' array
+    this.strips.push(newStrip);
+    //Remove head if screen is full (inc. +1 overflow)
+    if(this.strips.length-1 > context.canvas.width / TILESIZE)
+    {
+      this.strips.shift();
+    }
+  }
+  draw()
+  {
+    //Assumes base speed (1) moves 16px per 60 frames
+    this.offset += this.speed * (16/60);
+    //Foreach strip (along x-axis, in reverse)
+    for(let i = this.strips.length-1; i >= 0 ; i--)
+    {
+      //foreach tile in strip *i* (down y-axis)
+      for(let j = 0; j < this.strips[i].length; j++)
+      {
+        //Expanded for readability
+        let sx = this.strips[i][j].sx;
+        let sy = this.strips[i][j].sy;
+        let dx = (context.canvas.width - (i+1)*TILESIZE) + Math.floor(this.offset);
+        let dy = j*TILESIZE + this.yPos;
+        context.drawImage(spritesheet.img,
+                          sx, sy, TILESIZE, TILESIZE,  //source image data
+                          dx, dy, TILESIZE, TILESIZE); //dest.  image data
+      }
+    }
+    //If furthest strip is offscreen, purge & replace
+    if(this.offset >= 32)
+    {
+      this.makeNewStrip();
+      this.offset = 0;
+    }
+  }
 }
+
+var sky   = new Scrollable(11,0,1);
+var floor = new Scrollable(4,context.canvas.height - 4*TILESIZE,10,32);
 
 var controller = {
   left:false, right:false, up:false,
@@ -118,84 +146,74 @@ var controller = {
     }
   }
 };
-/*End of var declaration*/
 
-//Temp solution, static world
-var drawSky = function(iFrame)
+//Gamepad controller for mobile
+//Block default behaviour
+cancelEvent=e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  e.cancelBubble = true;
+  e.returnValue = false
+};
+dpad.ontouchstart = dpad.ontouchmove = dpad.ontouchend = dpad.ontouchcancel = cancelEvent;
+
+//On Android and iOS, use touchstart/end
+if( /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) )
 {
-  //Tiles move 32px per 60 frames
-  sky.offset += sky.speed * (32/60);
-  //Foreach strip (along x-axis, in reverse)
-  for(let i = sky.strips.length-1; i >= 0 ; i--)
-  {
-    //foreach tile in strip *i* (down y-axis)
-    for(let j = 0; j < sky.strips[i].length; j++)
-    {
-      //Expanded for readability
-      let sx = sky.strips[i][j].sx;
-      let sy = sky.strips[i][j].sy;
-      let dx = (context.canvas.width - (i+1)*TILESIZE) + sky.offset;
-      let dy = j*TILESIZE + sky.yPos;
-      context.drawImage(spritesheet.img,
-                        sx, sy, TILESIZE, TILESIZE,  //source image data
-                        dx, dy, TILESIZE, TILESIZE); //dest.  image data
-    }
-  }
-
-  if(sky.offset >= 32)
-  {
-    generateSkyStrip(true);
-    sky.offset = 0;
-  }
+  d = "touchstart";
+  u = "touchend";
 }
-
-var drawFloor = function(iFrame)
+//On PC, use mousedown/up
+else
 {
-  //Tiles move 32px per 60 frames
-  floor.offset += floor.speed * (32/60);
-  //Foreach strip (along x-axis, in reverse)
-  for(let i = floor.strips.length-1; i >= 0; i--)
-  {
-    //foreach tile in strip *i* (down y-axis)
-    for(let j = 0; j < floor.strips[i].length; j++)
-    {
-      //Expanded for readability
-      let sx = floor.strips[i][j].sx;
-      let sy = floor.strips[i][j].sy;
-      let dx = (context.canvas.width - (i+1)*TILESIZE) + floor.offset;
-      let dy = j*TILESIZE + floor.yPos;
-      context.drawImage(spritesheet.img,
-                        sx, sy, TILESIZE, TILESIZE,  //source image data
-                        dx, dy, TILESIZE, TILESIZE); //dest.  image data
-    }
-  }
+  d = "mousedown";
+  u = "mouseup";
+};
 
-  if(floor.offset >= 32)
-  {
-    generateFloorStrip(true);
-    floor.offset = 0;
-  }
-}
+//Event Handlers
+//Jump
+touchJ.addEventListener(d,e=>{
+  cancelEvent(e);
+  controller.up=true;
+}, {passive:false});
+touchJ.addEventListener(u,e=>{
+  cancelEvent(e);
+  controller.up=false;
+}, {passive:false});
 
-drawLine = function()
-{
-  context.strokeStyle = "#FF0000";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(0,floor.yPos);
-  context.lineTo(context.canvas.width,floor.yPos);
-  context.stroke();
-}
+//left
+touchL.addEventListener(d,e=>{
+  cancelEvent(e);
+  controller.left=true;
+}, {passive:false});
+touchL.addEventListener(u,e=>{
+  cancelEvent(e);
+  controller.left=false;
+}, {passive:false});
 
+//Right
+touchR.addEventListener(d,e=>{
+  cancelEvent(e);
+  controller.right=true;
+}, {passive:false});
+touchR.addEventListener(u,e=>{
+  cancelEvent(e);
+  controller.right=false;
+}, {passive:false});
+
+//End of Gamepad
+
+//Draw character
 drawCharacter = function()
 {
+  //Animate "walk"
+  //Looks like shit
+  //if(!character.jumping && iFrame > 50) { character.sy = 32;  }
   context.drawImage(spritesheet.img,
                     character.sx,   character.sy,   TILESIZE, TILESIZE,  //source image data
                     character.xPos, character.yPos, TILESIZE, TILESIZE); //dest.  image data
 }
 
-
-/*Beginning of game programming*/
 var gameLoop = function()
 {
   //Default spritesheet selection
@@ -208,6 +226,7 @@ var gameLoop = function()
   }
   if(controller.left)  { character.xVel -= .5; character.sx=0; }
   if(controller.right) { character.xVel += .5; character.sx=64;}
+
   //Physics
   character.yVel += 1; //Gravity
   character.xPos += character.xVel;
@@ -238,13 +257,15 @@ var gameLoop = function()
   context.fillRect(0,0,context.canvas.width,context.canvas.height);
 
   //Construct next frame
-  drawLine(); //Debug only
-  drawFloor(iFrame);
-  drawSky(iFrame);
+  floor.draw();
+  sky.draw();
   drawCharacter();
 
   //Update iframe (yes ugly ew)
   if(iFrame < 60){iFrame++;}else{iFrame = 0;}
+
+
+
 
   //Update
   window.requestAnimationFrame(gameLoop);
