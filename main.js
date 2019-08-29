@@ -9,8 +9,10 @@
 onresize=e=>{
   // Zoom the page to maximise content
   // Height = canvas=480 + gamepad=240 + gap= . Gap is bug fix.
-  document.body.style.zoom=Math.min(window.innerWidth/640, window.innerHeight/900);
-  //document.body.style.zoom=1;
+  //document.body.style.zoom=Math.min(window.innerWidth/640, window.innerHeight/900);
+  let zoom=Math.min(window.innerWidth/640, window.innerHeight/900);
+  document.body.style.MozTransform = "scale("+zoom+")";
+  document.body.style.MozTransformOrigin = "0 0";
   // Add padding at the top of the page, to centre the content vertically
   document.body.style.paddingTop=((window.innerHeight/document.body.style.zoom)-900)/2;
 };
@@ -166,7 +168,8 @@ cancelEvent=e=>{
 gamepad.ontouchstart = gamepad.ontouchmove = gamepad.ontouchend = gamepad.ontouchcancel = cancelEvent;
 
 //On Android and iOS, use touchstart/end
-if( /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) )
+//Of course, firefox mobile doesn't work, because it sucks.
+if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))
 {
   d = "touchstart";
   u = "touchend";
@@ -179,38 +182,16 @@ else
 };
 
 //Event Handlers
-//Jump
-touchJ.addEventListener(d,e=>{
-  cancelEvent(e);
-  controller.up=true;
-}, {passive:false});
-touchJ.addEventListener(u,e=>{
-  cancelEvent(e);
-  controller.up=false;
-}, {passive:false});
-
 //left
-touchL.addEventListener(d,e=>{
-  cancelEvent(e);
-  controller.left=true;
-}, {passive:false});
-touchL.addEventListener(u,e=>{
-  cancelEvent(e);
-  controller.left=false;
-}, {passive:false});
-
+touchL.addEventListener(d,e=>{cancelEvent(e); controller.left=true; }, false);
+touchL.addEventListener(u,e=>{cancelEvent(e); controller.left=false;}, false);
 //Right
-touchR.addEventListener(d,e=>{
-  cancelEvent(e);
-  controller.right=true;
-}, {passive:false});
-touchR.addEventListener(u,e=>{
-  cancelEvent(e);
-  controller.right=false;
-}, {passive:false});
-
-//End of Gamepad
-
+touchR.addEventListener(d,e=>{cancelEvent(e); controller.right=true; }, false);
+touchR.addEventListener(u,e=>{cancelEvent(e); controller.right=false;}, false);
+//Jump
+touchJ.addEventListener(d,e=>{cancelEvent(e); controller.up=true; }, false);
+touchJ.addEventListener(u,e=>{cancelEvent(e); controller.up=false;}, false);
+//End of Gamepad stuff
 
 var ObjectManager =
 {
